@@ -15,6 +15,17 @@ type Task struct {
 
 	state *State
 	log   *Log
+
+	stdout io.Writer
+	stderr io.Writer
+}
+
+func (t *Task) SetStdout(stdout io.Writer) {
+	t.stdout = stdout
+}
+
+func (t *Task) SetStderr(stderr io.Writer) {
+	t.stderr = stderr
 }
 
 // State contains information about rsync process
@@ -31,7 +42,7 @@ type Log struct {
 	Stdout string `json:"stdout"`
 }
 
-// State returns inforation about rsync processing task
+// State returns information about rsync processing task
 func (t Task) State() State {
 	return *t.state
 }
@@ -45,23 +56,33 @@ func (t Task) Log() Log {
 }
 
 // Run starts rsync process with options
-func (t *Task) Run() error {
-	stderr, err := t.rsync.StderrPipe()
-	if err != nil {
+func (t *Task) Run() (err error) {
+	var stderr, stdout io.ReadCloser
+	if stderr, err = t.rsync.StderrPipe(); err != nil {
 		return err
 	}
-	defer stderr.Close()
+	defer func() {
+		_ = stderr.Close()
+	}()
 
-	stdout, err := t.rsync.StdoutPipe()
-	if err != nil {
+	if stdout, err = t.rsync.StdoutPipe(); err != nil {
 		return err
 	}
-	defer stdout.Close()
+	defer func() {
+		_ = stdout.Close()
+	}()
 
 	var wg sync.WaitGroup
-	go processStdout(&wg, t, stdout)
-	go processStderr(&wg, t, stderr)
-	wg.Add(2)
+	wg.Add(1)
+	go func() {
+		processStdout(t, stdout)
+		wg.Done()
+	}()
+	wg.Add(1)
+	go func() {
+		processStderr(t, stderr)
+		wg.Done()
+	}()
 
 	err = t.rsync.Run()
 	wg.Wait()
@@ -78,17 +99,17 @@ func NewTask(source, destination string, rsyncOptions RsyncOptions) *Task {
 	rsyncOptions.Archive = true
 
 	return &Task{
-		rsync: NewRsync(source, destination, rsyncOptions),
-		state: &State{},
-		log:   &Log{},
+		rsync:  NewRsync(source, destination, rsyncOptions),
+		state:  &State{},
+		log:    &Log{},
+		stdout: io.Discard,
+		stderr: io.Discard,
 	}
 }
 
-func processStdout(wg *sync.WaitGroup, task *Task, stdout io.Reader) {
+func processStdout(task *Task, stdout io.Reader) {
 	const maxPercents = float64(100)
 	const minDivider = 1
-
-	defer wg.Done()
 
 	progressMatcher := newMatcher(`\(.+-chk=(\d+.\d+)`)
 	speedMatcher := newMatcher(`(\d+\.\d+.{2}\/s)`)
@@ -98,6 +119,7 @@ func processStdout(wg *sync.WaitGroup, task *Task, stdout io.Reader) {
 	scanner := bufio.NewScanner(stdout)
 	for scanner.Scan() {
 		logStr := scanner.Text()
+		_, _ = task.stdout.Write(scanner.Bytes())
 		if progressMatcher.Match(logStr) {
 			task.state.Remain, task.state.Total = getTaskProgress(progressMatcher.Extract(logStr))
 
@@ -113,12 +135,11 @@ func processStdout(wg *sync.WaitGroup, task *Task, stdout io.Reader) {
 	}
 }
 
-func processStderr(wg *sync.WaitGroup, task *Task, stderr io.Reader) {
-	defer wg.Done()
-
+func processStderr(task *Task, stderr io.Reader) {
 	scanner := bufio.NewScanner(stderr)
 	for scanner.Scan() {
 		task.log.Stderr += scanner.Text() + "\n"
+		_, _ = task.stderr.Write(scanner.Bytes())
 	}
 }
 

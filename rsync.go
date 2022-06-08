@@ -1,6 +1,7 @@
 package grsync
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -21,15 +22,21 @@ type Rsync struct {
 type RsyncOptions struct {
 	// RsyncBinaryPath is a path to the rsync binary; by default just `rsync`
 	RsyncBinaryPath string
+	// SSHPassBinaryPath is a path to the sshpass binary; by default just `sshpass`
+	SSHPassBinaryPath string
+	// SSHPassword is a pass used with sshpass; by default `` - not used
+	SSHPassword string
+	// RsyncContext - context for exec
+	RsyncContext context.Context
 	// RsyncPath specify the rsync to run on remote machine, e.g `--rsync-path="cd /a/b && rsync"`
 	RsyncPath string
 	// Verbose increase verbosity
 	Verbose bool
-	// Quet suppress non-error messages
+	// Quiet suppress non-error messages
 	Quiet bool
 	// Checksum skip based on checksum, not mod-time & size
 	Checksum bool
-	// Archve is archive mode; equals -rlptgoD (no -H,-A,-X)
+	// Archive is archive mode; equals -rlptgoD (no -H,-A,-X)
 	Archive bool
 	// Recurse into directories
 	Recursive bool
@@ -45,7 +52,7 @@ type RsyncOptions struct {
 	Append bool
 	// AppendVerify --append w/old data in file checksum
 	AppendVerify bool
-	// Dirs transfer directories without recursing
+	// Dirs transfer directories without recursive
 	Dirs bool
 	// Links copy symlinks as symlinks
 	Links bool
@@ -224,22 +231,39 @@ func (r Rsync) Run() error {
 
 // NewRsync returns task with described options
 func NewRsync(source, destination string, options RsyncOptions) *Rsync {
-	arguments := append(getArguments(options), source, destination)
+	var arguments []string
 
 	binaryPath := "rsync"
 	if options.RsyncBinaryPath != "" {
 		binaryPath = options.RsyncBinaryPath
 	}
+	var cmd *exec.Cmd
+	if options.SSHPassword == "" {
+		arguments = append(getArguments(options), source, destination)
+	} else {
+		arguments = append([]string{"-p", options.SSHPassword, binaryPath}, getArguments(options)...)
+		arguments = append(arguments, source, destination)
+		if options.SSHPassBinaryPath == "" {
+			binaryPath = "sshpass"
+		} else {
+			binaryPath = options.SSHPassBinaryPath
+		}
+	}
+	if options.RsyncContext == nil {
+		cmd = exec.Command(binaryPath, arguments...)
+	} else {
+		cmd = exec.CommandContext(options.RsyncContext, binaryPath, arguments...)
+	}
 
 	return &Rsync{
 		Source:      source,
 		Destination: destination,
-		cmd:         exec.Command(binaryPath, arguments...),
+		cmd:         cmd,
 	}
 }
 
 func getArguments(options RsyncOptions) []string {
-	arguments := []string{}
+	var arguments []string
 
 	if options.RsyncPath != "" {
 		arguments = append(arguments, "--rsync-path", options.RsyncPath)
