@@ -47,4 +47,18 @@ func TestMatcherExtract(t *testing.T) {
 		extractedText := m.Extract(strToMatch)
 		assert.Equal(t, extractedText, "2.81MB/s")
 	})
+
+	t.Run("should extract folder", func(t *testing.T) {
+		const strToMatch = "2022-07-22/12/"
+		m := newMatcher(`^(\S+.*\S+)$`)
+		extractedText := m.Extract(strToMatch)
+		assert.Equal(t, "2022-07-22/12/", extractedText)
+	})
+
+	t.Run("should extract files", func(t *testing.T) {
+		const strToMatch = "2022-07-22/12/20220722_122500_1.flv"
+		m := newMatcher(`^(\S+.*\S+)$`)
+		extractedText := m.Extract(strToMatch)
+		assert.Equal(t, "2022-07-22/12/20220722_122500_1.flv", extractedText)
+	})
 }

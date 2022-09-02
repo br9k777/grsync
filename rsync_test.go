@@ -1,7 +1,13 @@
 package grsync
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"go.uber.org/zap"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -578,4 +584,90 @@ func TestParseArguments(t *testing.T) {
 		})
 		assert.Contains(t, args, "--ipv6")
 	})
+}
+
+const (
+	testFileForSync = "/tmp/big_test_file"
+	targetCopy      = "/tmp/big_test_file_copy"
+)
+
+func TestSyncStatus(t *testing.T) {
+
+	var (
+		task    *Task
+		options RsyncOptions
+		err     error
+	)
+
+	if _, err = os.Stat(testFileForSync); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			bigBuff := make([]byte, 100000000)
+			if err = os.WriteFile(testFileForSync, bigBuff, 0666); err != nil {
+				fmt.Printf("fail create file for test : %s", err)
+				return
+			}
+		} else {
+			zap.S().Errorf("fail create file for test : %s", err)
+			return
+		}
+	}
+	if _, err = os.Stat(targetCopy); err == nil {
+		if err = os.RemoveAll(targetCopy); err != nil {
+			zap.S().Errorf("can't remove target file for test : %s", err)
+			return
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	options = RsyncOptions{
+		Archive:        true,
+		Verbose:        true,
+		DryRun:         false,
+		Partial:        true,
+		Progress:       true,
+		BandwidthLimit: 20000,
+		RsyncContext:   ctx,
+	}
+
+	task = NewTask(
+		testFileForSync,
+		targetCopy,
+		options,
+	)
+	task.SetStdout(os.Stdout)
+	task.SetStderr(os.Stderr)
+	zap.S().Debugf("start sync")
+	go func() {
+		if err = task.Run(); err != nil {
+			zap.S().Errorf("rsync err : %s", err)
+			cancel()
+			return
+		}
+		cancel()
+	}()
+OUT:
+	for {
+		select {
+		case <-ctx.Done():
+			break OUT
+		case <-time.NewTimer(time.Second * 1).C:
+			zap.S().Debugf("file  %s speed %s progress %f", task.State().CopiedObject, task.State().Speed, task.State().Progress)
+		}
+	}
+	zap.S().Debugf("end sync")
+	return
+}
+
+func init() {
+	c := zap.NewDevelopmentConfig()
+	c.OutputPaths = []string{"stdout"}
+	c.ErrorOutputPaths = []string{"stderr"}
+	c.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+	c.DisableCaller = false
+	logger, err := c.Build()
+	if err != nil {
+		zap.S().Errorf("Fatal error, before set logger %s", err)
+	}
+	zap.ReplaceGlobals(logger)
 }

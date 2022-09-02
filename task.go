@@ -4,9 +4,16 @@ import (
 	"bufio"
 	"io"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+)
+
+var (
+	progressMatcher *matcher
+	speedMatcher    *matcher
+	fileMatcher     *regexp.Regexp
 )
 
 // Task is high-level API under rsync
@@ -30,10 +37,11 @@ func (t *Task) SetStderr(stderr io.Writer) {
 
 // State contains information about rsync process
 type State struct {
-	Remain   int     `json:"remain"`
-	Total    int     `json:"total"`
-	Speed    string  `json:"speed"`
-	Progress float64 `json:"progress"`
+	Remain       int     `json:"remain"`
+	Total        int     `json:"total"`
+	Speed        string  `json:"speed"`
+	Progress     float64 `json:"progress"`
+	CopiedObject string  `json:"copied object"`
 }
 
 // Log contains raw stderr and stdout outputs
@@ -111,14 +119,12 @@ func processStdout(task *Task, stdout io.Reader) {
 	const maxPercents = float64(100)
 	const minDivider = 1
 
-	progressMatcher := newMatcher(`\(.+-chk=(\d+.\d+)`)
-	speedMatcher := newMatcher(`(\d+\.\d+.{2}\/s)`)
-
 	// Extract data from strings:
 	//         999,999 99%  999.99kB/s    0:00:59 (xfr#9, to-chk=999/9999)
 	scanner := bufio.NewScanner(stdout)
 	for scanner.Scan() {
 		logStr := scanner.Text()
+
 		_, _ = task.stdout.Write(scanner.Bytes())
 		if progressMatcher.Match(logStr) {
 			task.state.Remain, task.state.Total = getTaskProgress(progressMatcher.Extract(logStr))
@@ -129,6 +135,10 @@ func processStdout(task *Task, stdout io.Reader) {
 
 		if speedMatcher.Match(logStr) {
 			task.state.Speed = getTaskSpeed(speedMatcher.ExtractAllStringSubmatch(logStr, 2))
+		}
+
+		if fileMatcher.MatchString(logStr) {
+			task.state.CopiedObject = fileMatcher.FindString(logStr)
 		}
 
 		task.log.Stdout += logStr + "\n"
@@ -168,4 +178,10 @@ func getTaskSpeed(data [][]string) string {
 	}
 
 	return data[1][1]
+}
+
+func init() {
+	progressMatcher = newMatcher(`\(.+-chk=(\d+.\d+)`)
+	speedMatcher = newMatcher(`(\d+\.\d+.{2}\/s)`)
+	fileMatcher = regexp.MustCompile(`^(\S+.*\S+)$`)
 }
