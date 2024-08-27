@@ -27,11 +27,11 @@ type Task struct {
 	stderr io.Writer
 }
 
-func (t Task) SetStdout(stdout io.Writer) {
+func (t *Task) SetStdout(stdout io.Writer) {
 	t.stdout = stdout
 }
 
-func (t Task) SetStderr(stderr io.Writer) {
+func (t *Task) SetStderr(stderr io.Writer) {
 	t.stderr = stderr
 }
 
@@ -51,12 +51,12 @@ type Log struct {
 }
 
 // State returns information about rsync processing task
-func (t Task) State() State {
+func (t *Task) State() State {
 	return *t.state
 }
 
 // Log return structure which contains raw stderr and stdout outputs
-func (t Task) Log() Log {
+func (t *Task) Log() Log {
 	return Log{
 		Stderr: t.log.Stderr,
 		Stdout: t.log.Stdout,
