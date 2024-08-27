@@ -27,11 +27,11 @@ type Task struct {
 	stderr io.Writer
 }
 
-func (t *Task) SetStdout(stdout io.Writer) {
+func (t Task) SetStdout(stdout io.Writer) {
 	t.stdout = stdout
 }
 
-func (t *Task) SetStderr(stderr io.Writer) {
+func (t Task) SetStderr(stderr io.Writer) {
 	t.stderr = stderr
 }
 
@@ -99,7 +99,7 @@ func (t *Task) Run() (err error) {
 }
 
 // NewTask returns new rsync task
-func NewTask(source, destination string, rsyncOptions RsyncOptions) *Task {
+func NewTask(source []string, destination string, rsyncOptions RsyncOptions) *Task {
 	// Force set required options
 	rsyncOptions.HumanReadable = true
 	rsyncOptions.Partial = true
@@ -115,7 +115,7 @@ func NewTask(source, destination string, rsyncOptions RsyncOptions) *Task {
 	}
 }
 
-func NewTaskWithoutForceOptions(source, destination string, rsyncOptions RsyncOptions) *Task {
+func NewTaskWithoutForceOptions(source []string, destination string, rsyncOptions RsyncOptions) *Task {
 	return &Task{
 		rsync:  NewRsync(source, destination, rsyncOptions),
 		state:  &State{},

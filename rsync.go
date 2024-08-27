@@ -12,7 +12,7 @@ import (
 
 // Rsync is wrapper under rsync
 type Rsync struct {
-	Source      string
+	Source      []string
 	Destination string
 
 	cmd *exec.Cmd
@@ -144,9 +144,9 @@ type RsyncOptions struct {
 	PruneEmptyDirs bool
 	// NumericIDs don't map uid/gid values by user/group name
 	NumericIDs bool
-	// Timeout timeout=SECONDS set I/O timeout in seconds
+	// Timeout=SECONDS set I/O timeout in seconds
 	Timeout int
-	// Contimeout contimeout=SECONDS set daemon connection timeout in seconds
+	// Contimeout=SECONDS set daemon connection timeout in seconds
 	Contimeout int
 	// IgnoreTimes don't skip files that match size and time
 	IgnoreTimes bool
@@ -230,7 +230,7 @@ func (r Rsync) Run() error {
 }
 
 // NewRsync returns task with described options
-func NewRsync(source, destination string, options RsyncOptions) *Rsync {
+func NewRsync(source []string, destination string, options RsyncOptions) *Rsync {
 	var arguments []string
 
 	binaryPath := "rsync"
@@ -239,10 +239,12 @@ func NewRsync(source, destination string, options RsyncOptions) *Rsync {
 	}
 	var cmd *exec.Cmd
 	if options.SSHPassword == "" {
-		arguments = append(getArguments(options), source, destination)
+		arguments = append(getArguments(options), source...)
+		arguments = append(arguments, destination)
 	} else {
 		arguments = append([]string{"-p", options.SSHPassword, binaryPath}, getArguments(options)...)
-		arguments = append(arguments, source, destination)
+		arguments = append(arguments, source...)
+		arguments = append(arguments, destination)
 		if options.SSHPassBinaryPath == "" {
 			binaryPath = "sshpass"
 		} else {
