@@ -115,6 +115,16 @@ func NewTask(source, destination string, rsyncOptions RsyncOptions) *Task {
 	}
 }
 
+func NewTaskWithoutForceOptions(source, destination string, rsyncOptions RsyncOptions) *Task {
+	return &Task{
+		rsync:  NewRsync(source, destination, rsyncOptions),
+		state:  &State{},
+		log:    &Log{},
+		stdout: io.Discard,
+		stderr: io.Discard,
+	}
+}
+
 func processStdout(task *Task, stdout io.Reader) {
 	const maxPercents = float64(100)
 	const minDivider = 1
