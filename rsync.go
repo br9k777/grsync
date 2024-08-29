@@ -124,6 +124,10 @@ type RsyncOptions struct {
 	DeleteAfter bool
 	// DeleteExcluded also delete excluded files from dest dirs
 	DeleteExcluded bool
+	// ignore missing source args without error
+	IgnoreMissingArguments bool
+	// delete missing source args from destination
+	DeleteMissingArguments bool
 	// IgnoreErrors delete even if there are I/O errors
 	IgnoreErrors bool
 	// Force deletion of dirs even if not empty
@@ -453,6 +457,14 @@ func getArguments(options RsyncOptions) []string {
 
 	if options.DeleteExcluded {
 		arguments = append(arguments, "--delete-excluded")
+	}
+
+	if options.IgnoreMissingArguments {
+		arguments = append(arguments, "--ignore-missing-args")
+	}
+
+	if options.DeleteMissingArguments {
+		arguments = append(arguments, "--delete-missing-args")
 	}
 
 	if options.IgnoreErrors {
