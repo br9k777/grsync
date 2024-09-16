@@ -233,6 +233,29 @@ func (r Rsync) Run() error {
 	return r.cmd.Wait()
 }
 
+func PrintRsyncCommandForLinux(source []string, destination string, options RsyncOptions) (command string) {
+	var arguments []string
+	binaryPath := "rsync"
+	if options.RsyncBinaryPath != "" {
+		binaryPath = options.RsyncBinaryPath
+	}
+
+	if options.SSHPassword == "" {
+		arguments = append(getArguments(options), source...)
+		arguments = append(arguments, destination)
+	} else {
+		arguments = append([]string{"-p", "*****", binaryPath}, getArguments(options)...)
+		arguments = append(arguments, source...)
+		arguments = append(arguments, destination)
+		if options.SSHPassBinaryPath == "" {
+			binaryPath = "sshpass"
+		} else {
+			binaryPath = options.SSHPassBinaryPath
+		}
+	}
+	return binaryPath + " " + strings.Join(arguments, " ")
+}
+
 // NewRsync returns task with described options
 func NewRsync(source []string, destination string, options RsyncOptions) *Rsync {
 	var arguments []string
